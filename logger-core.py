@@ -1,47 +1,57 @@
 # coding = utf-8
 # using namespace std
-import json
+from json import dumps, loads
+from conf.configurer import ConfFile
 from typing import AnyStr
-from datetime import date, datetime
 
 
-class LogOnJson:
+class LoadJsonLog(object):
     """
+
     """
+    #        Envvars
     source_file = AnyStr
-    document = list()
+    logs = list()
     got_data = False
-    empty_logs = bool
+    configuration_obj = ConfFile()
+    std_formatter = ("  " * 4)  # 4 spaces format, ident guide basic
 
-    class UnloadData(Exception):
-        args = "The system can't do that action without a loaded log file!"
+    #        Exceptions
+    class InvalidFileExtension(Exception):
+        args = "That's not a valid file extension, expecting .json file, try the text mode log"
 
-    class EmptyLogsError(Exception):
-        args = "The system can't do that action without logs on the log file!"
+    class UnloadMainLogs(Exception):
+        args = "The system can't do that action without the main logs of the system!"
 
-    class LogNotFound(Exception):
-        args = "That log can't be found on the system!"
+    class InvalidFailureNumber(Exception):
+        args = "That's not a valid fails number"
+
+    #        Methods
 
     @classmethod
-    def check_valid_file_type(cls, fl_name: AnyStr, auto_raise=True) -> bool:
+    def check_file_ext(cls, file_path: AnyStr, auto_raise: bool = False) -> bool:
         """
 
-        :param fl_name:
+        :param file_path:
         :param auto_raise:
         :return:
         """
-        sep = str(fl_name).split(".")
-        if sep[-1] != ".json":
-            if auto_raise is True: raise cls.UnloadData()
+        sp = str(file_path).split(".")
+        if sp[-1] != "json":
+            if auto_raise is True: raise cls.InvalidFileExtension()
             else: return False
         else: return True
 
-    def __init__(self, source: AnyStr):
-        if self.check_valid_file_type(source, True):
-            self.source_file = source
-            with open(self.source_file, "r+") as doc: self.document = json.loads(doc.read())
+    def __init__(self, log_file: AnyStr):
+        """
+
+        :param log_file:
+        """
+        if self.check_file_ext(log_file, True) is True:
+            self.source_file = log_file
+            with open(self.source_file, "r") as logs:
+                self.logs = loads(logs.read())
             self.got_data = True
-            self.empty_logs = len(self.document) <= 0
 
     @classmethod
     def update_log_file(cls):
@@ -49,10 +59,100 @@ class LogOnJson:
 
         :return:
         """
-        converted_logs = json.dumps(cls.document)
-        with open(cls.source_file, "w") as logs: logs.write(converted_logs)
-        del converted_logs
+        if cls.got_data is False: raise cls.UnloadMainLogs()
+        with open(cls.source_file, "w") as logs_source:
+            dumped_data = dumps(cls.logs)
+            logs_source.write(dumped_data)
 
+    @classmethod
+    def clear_all_logs(cls):
+        """
+
+        :return:
+        """
+        cls.logs = []
+        cls.update_log_file()
+
+    def add_log(self, action: AnyStr, failures: int, failure_code: str, auto_commit = False):
+        """
+
+        :param action:
+        :param failures:
+        :param failure_code:
+        :param auto_commit:
+        :return:
+        """
+        log_new = {}
+        datetime = self.configuration_obj.get_date_time_from_conf()
+        log_new['Time'] = datetime
+        log_new['Action'] = action
+        if failures < 0: raise self.InvalidFailureNumber()
+        log_new['Failures'] = failures
+        log_new['FailureCode'] = failure_code
+        self.logs.append(log_new)
+        del log_new
+        if auto_commit is True: self.update_log_file()
+
+    def query_logs_action(self, action: str) -> list:
+        """
+
+        :param action:
+        :return:
+        """
+        results = []
+        for log in self.logs:
+            if action in log['Action']: results.append(results)
+        return results
+
+    def query_logs_failure(self, failed = False) -> list:
+        """
+
+        :param failed:
+        :return:
+        """
+        results = []
+        if failed is True:
+            for log in self.logs:
+                if log['Failures'] > 0: results.append(log)
+        else:
+            for log in self.logs:
+                if log['Failures'] == 0: results.append(log)
+        return results
+
+    def query_logs_failure_code(self, code: str) -> list:
+        """
+
+        :param code:
+        :return:
+        """
+        results = []
+        for log in self.logs:
+            if log['FailureCode'] == code: results.append(log)
+        return results
+
+    def query_logs_date(self, date: str) -> list:
+        """
+
+        :param date:
+        :return:
+        """
+        results = []
+        for log in self.logs:
+            separed = str(log['Time']).split(self.configuration_obj.std_formatter)
+            if separed[0] == date: results.append(log)
+        return results
+
+    def query_logs_time(self, time: str) -> list:
+        """
+
+        :param time:
+        :return:
+        """
+        results = []
+        for log in self.logs:
+            sep = str(log['Time']).split(self.configuration_obj.std_formatter)
+            if sep[1] == time: results.append(log)
+        return results
 
 
 
